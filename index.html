@@ -4,13 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>Earthquake Alert Dashboard</title>
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
- <!-- Progressive Web App / Mobile Settings -->
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0f172a">
-<link rel="icon" sizes="192x192" href="https://upload.wikimedia.org/wikipedia/commons/9/99/Globe_icon.svg">
+  <!-- Progressive Web App / Mobile Settings -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="icon" sizes="192x192" href="https://upload.wikimedia.org/wikipedia/commons/9/99/Globe_icon.svg">
 
   <style>
     body {
@@ -62,7 +63,7 @@
 
     #overlayMessage {
       position: absolute;
-      top: 50%;
+      top: 60%;
       left: 50%;
       transform: translate(-50%, -50%);
       color: #94a3b8;
@@ -84,20 +85,47 @@
       font-size: 0.9rem;
     }
 
-    button {
-      background: #22c55e;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 10px 20px;
-      font-size: 0.9rem;
+    /* ====== SOUND TOGGLE DESIGN ====== */
+    #soundContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
       margin-bottom: 10px;
-      cursor: pointer;
-      transition: 0.2s;
     }
 
-    button:hover {
-      background: #16a34a;
+    #soundButton {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 24px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      width: 80%;
+      max-width: 280px;
+    }
+
+    #soundButton:hover {
+      transform: scale(1.03);
+      background: linear-gradient(90deg, #16a34a, #15803d);
+    }
+
+    #soundButton.enabled {
+      background: linear-gradient(90deg, #2563eb, #1d4ed8);
+    }
+
+    #soundNote {
+      color: #93c5fd;
+      font-size: 0.9rem;
+      margin-top: 6px;
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
@@ -106,46 +134,49 @@
   <p id="status">Fetching data...</p>
   <div id="map"></div>
 
-  <button onclick="initSound()">Enable Sound Alerts 🔊</button>
+  <!-- Sound Toggle -->
+  <div id="soundContainer">
+    <button id="soundButton" onclick="initSound()">Enable Sound Alerts 🔊</button>
+    <p id="soundNote" style="display:none;">🔊 Sound alerts are ON</p>
+  </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Magnitude</th>
-        <th>Location</th>
-        <th>Distance (km)</th>
-        <th>Time</th>
-      </tr>
-    </thead>
-    <tbody id="quakeTable"></tbody>
+  <div style="position: relative; width: 92%;">
+    <table>
+      <thead>
+        <tr>
+          <th>Magnitude</th>
+          <th>Location</th>
+          <th>Distance (km)</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="quakeTable"></tbody>
+    </table>
     <div id="overlayMessage">No earthquakes detected nearby 🌎</div>
-  </table>
+  </div>
 
   <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
 
   <script>
     // Initialize map
-const map = L.map("map").setView([12.8797, 121.7740], 5);
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
+    const map = L.map("map").setView([12.8797, 121.7740], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
 
-// Try to locate the user's position
-map.locate({ setView: true, maxZoom: 8, watch: true });
+    // Try to locate the user's position
+    map.locate({ setView: true, maxZoom: 8, watch: true });
 
-function onLocationFound(e) {
-  const radius = e.accuracy / 2;
-  const userMarker = L.marker(e.latlng).addTo(map)
-    .bindPopup("📍 You are here").openPopup();
+    function onLocationFound(e) {
+      const radius = e.accuracy / 2;
+      L.marker(e.latlng).addTo(map).bindPopup("📍 You are here").openPopup();
+      L.circle(e.latlng, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+    }
 
-  L.circle(e.latlng, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
-}
+    function onLocationError(e) {
+      console.warn("⚠️ Location access denied:", e.message);
+    }
 
-function onLocationError(e) {
-  console.warn("⚠️ Location access denied:", e.message);
-}
-
-map.on("locationfound", onLocationFound);
-map.on("locationerror", onLocationError);
-
+    map.on("locationfound", onLocationFound);
+    map.on("locationerror", onLocationError);
 
     const quakeTable = document.getElementById("quakeTable");
     const status = document.getElementById("status");
@@ -154,9 +185,13 @@ map.on("locationerror", onLocationError);
 
     function initSound() {
       alertSound.play().then(() => {
-        alert("✅ Sound alerts are now enabled!");
+        const btn = document.getElementById("soundButton");
+        const note = document.getElementById("soundNote");
+        btn.classList.add("enabled");
+        btn.textContent = "Sound Alerts Enabled ✅";
+        note.style.display = "block";
       }).catch(() => {
-        alert("Please tap again to allow sound.");
+        alert("⚠️ Please tap again to allow sound — browser requires user interaction first.");
       });
     }
 
@@ -189,7 +224,7 @@ map.on("locationerror", onLocationError);
           const time = new Date(q.properties.time).toLocaleString();
 
           const row = document.createElement("tr");
-          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${time}</td>`;
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>-</td><td>${time}</td>`;
           quakeTable.appendChild(row);
 
           let color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
@@ -214,4 +249,3 @@ map.on("locationerror", onLocationError);
   </script>
 </body>
 </html>
-
