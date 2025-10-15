@@ -82,13 +82,12 @@
       animation: fadeIn 0.6s ease-in-out;
     }
 
-    /* ====== RESPONSIVE TABLE ====== */
     .table-container {
       width: 92%;
       margin: 10px 0;
       background: #1e293b;
       border-radius: 12px;
-      overflow-x: auto; /* Horizontal scroll on small screens */
+      overflow-x: auto;
       box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
       -webkit-overflow-scrolling: touch;
     }
@@ -96,7 +95,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 450px; /* prevents table columns from squishing too much */
+      min-width: 450px;
     }
 
     th, td {
@@ -104,7 +103,7 @@
       text-align: center;
       border-bottom: 1px solid #334155;
       font-size: 0.9rem;
-      white-space: nowrap; /* keeps text readable in small columns */
+      white-space: nowrap;
     }
 
     th {
@@ -117,20 +116,10 @@
     }
 
     @media (max-width: 600px) {
-      h1 {
-        font-size: 1.1rem;
-      }
-      #map {
-        height: 200px;
-      }
-      th, td {
-        padding: 8px 6px;
-        font-size: 0.8rem;
-      }
-      #soundButton {
-        font-size: 0.85rem;
-        padding: 10px 18px;
-      }
+      h1 { font-size: 1.1rem; }
+      #map { height: 200px; }
+      th, td { padding: 8px 6px; font-size: 0.8rem; }
+      #soundButton { font-size: 0.85rem; padding: 10px 18px; }
     }
   </style>
 </head>
@@ -139,13 +128,11 @@
   <p id="status">Fetching data...</p>
   <div id="map"></div>
 
-  <!-- Sound Toggle -->
   <div id="soundContainer">
     <button id="soundButton" onclick="initSound()">Enable Sound Alerts 🔊</button>
     <p id="soundNote" style="display:none;">🔊 Sound alerts are ON</p>
   </div>
 
-  <!-- Responsive Table -->
   <div class="table-container">
     <table>
       <thead>
@@ -165,15 +152,20 @@
   <script>
     const map = L.map("map").setView([12.8797, 121.7740], 5);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
+
+    let userLocation = null;
     map.locate({ setView: true, maxZoom: 8, watch: true });
 
     function onLocationFound(e) {
+      userLocation = e.latlng;
       const radius = e.accuracy / 2;
-      L.marker(e.latlng).addTo(map).bindPopup("📍 You are here").openPopup();
-      L.circle(e.latlng, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+      L.marker(userLocation).addTo(map).bindPopup("📍 You are here").openPopup();
+      L.circle(userLocation, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
     }
     map.on("locationfound", onLocationFound);
-    map.on("locationerror", () => {});
+    map.on("locationerror", () => {
+      status.textContent = "⚠️ Location not found. Using default view.";
+    });
 
     const quakeTable = document.getElementById("quakeTable");
     const status = document.getElementById("status");
@@ -189,6 +181,17 @@
       }).catch(() => {
         alert("⚠️ Please tap again to allow sound — browsers require interaction first.");
       });
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 6371; // km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     async function fetchQuakes() {
@@ -212,26 +215,45 @@
 
         status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
 
+        let nearbyDetected = false;
+
         quakes.forEach(q => {
           const mag = q.properties.mag;
           const place = q.properties.place;
           const time = new Date(q.properties.time).toLocaleString();
+          const lat = q.geometry.coordinates[1];
+          const lon = q.geometry.coordinates[0];
+
+          let distanceText = "-";
+          let nearby = false;
+
+          if (userLocation) {
+            const dist = haversine(userLocation.lat, userLocation.lng, lat, lon);
+            distanceText = dist.toFixed(1);
+            if (dist <= 200) nearby = true; // alert for ANY quake within 200 km
+          }
 
           const row = document.createElement("tr");
-          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>-</td><td>${time}</td>`;
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${distanceText}</td><td>${time}</td>`;
           quakeTable.appendChild(row);
 
           const color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
-          const marker = L.circleMarker(
-            [q.geometry.coordinates[1], q.geometry.coordinates[0]],
-            { color, radius: 6, fillOpacity: 0.8 }
-          ).addTo(map);
+          const marker = L.circleMarker([lat, lon], {
+            color,
+            radius: 6,
+            fillOpacity: 0.8
+          }).addTo(map);
 
           marker.bindPopup(
             `<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`
           );
 
-          if (mag >= 4.5) alertSound.play();
+          if (nearby && !nearbyDetected) {
+            nearbyDetected = true;
+            status.innerHTML = `🚨 Nearby Earthquake Detected! (${distanceText} km away)`;
+            alertSound.play();
+            alert(`🚨 Earthquake detected nearby!\nLocation: ${place}\nDistance: ${distanceText} km`);
+          }
         });
       } catch {
         status.textContent = "Failed to fetch earthquake data.";
