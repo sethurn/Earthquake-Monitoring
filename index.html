@@ -61,28 +61,16 @@
       font-size: 0.8rem;
     }
 
-    #overlayMessage {
-      position: absolute;
-      top: 60%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      color: #94a3b8;
-      font-size: 1rem;
-      text-align: center;
-      display: none;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0% { opacity: 0.5; }
-      50% { opacity: 1; transform: translate(-50%, -52%); }
-      100% { opacity: 0.5; transform: translate(-50%, -50%); }
-    }
-
     #status {
       margin: 10px;
       color: #94a3b8;
       font-size: 0.9rem;
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     /* ====== SOUND TOGGLE DESIGN ====== */
@@ -122,11 +110,6 @@
       margin-top: 6px;
       animation: fadeIn 0.6s ease-in-out;
     }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(5px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
   </style>
 </head>
 <body>
@@ -152,7 +135,6 @@
       </thead>
       <tbody id="quakeTable"></tbody>
     </table>
-    <div id="overlayMessage">No earthquakes detected nearby 🌎</div>
   </div>
 
   <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
@@ -180,7 +162,6 @@
 
     const quakeTable = document.getElementById("quakeTable");
     const status = document.getElementById("status");
-    const overlayMessage = document.getElementById("overlayMessage");
     const alertSound = document.getElementById("alertSound");
 
     function initSound() {
@@ -197,7 +178,6 @@
 
     async function fetchQuakes() {
       status.textContent = "Fetching data...";
-      overlayMessage.style.display = "none";
       quakeTable.innerHTML = "";
 
       const url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=" +
@@ -210,13 +190,11 @@
         const quakes = data.features || [];
 
         if (quakes.length === 0) {
-          overlayMessage.style.display = "block";
-          status.textContent = "No earthquakes observed near your area.";
+          status.innerHTML = "🌎 No earthquakes detected nearby.";
           return;
         }
 
         status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
-        overlayMessage.style.display = "none";
 
         quakes.forEach(q => {
           const mag = q.properties.mag;
