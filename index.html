@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Earthquake Alert Dashboard</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body {
+      font-family: "Poppins", sans-serif;
+      background: #0f172a;
+      color: #fff;
+      margin: 0;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin: 15px 0;
+      font-size: 1.4rem;
+    }
+
+    #map {
+      width: 92%;
+      height: 250px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+
+    #status {
+      margin: 10px;
+      color: #94a3b8;
+      font-size: 0.9rem;
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #soundContainer {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    #soundButton {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 24px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      width: 80%;
+      max-width: 280px;
+    }
+
+    #soundButton:hover {
+      transform: scale(1.03);
+      background: linear-gradient(90deg, #16a34a, #15803d);
+    }
+
+    #soundButton.enabled {
+      background: linear-gradient(90deg, #2563eb, #1d4ed8);
+    }
+
+    #soundNote {
+      color: #93c5fd;
+      font-size: 0.9rem;
+      margin-top: 6px;
+      animation: fadeIn 0.6s ease-in-out;
+    }
+
+    .table-container {
+      width: 92%;
+      margin: 10px 0;
+      background: #1e293b;
+      border-radius: 12px;
+      overflow-x: auto;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 450px;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #334155;
+      font-size: 0.9rem;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #334155;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.1rem;
+      }
+      #map {
+        height: 200px;
+      }
+      th, td {
+        padding: 8px 6px;
+        font-size: 0.8rem;
+      }
+      #soundButton {
+        font-size: 0.85rem;
+        padding: 10px 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>🌋 Earthquake Alert Dashboard</h1>
+  <p id="status">Fetching data...</p>
+  <div id="map"></div>
+
+  <div id="soundContainer">
+    <button id="soundButton" onclick="initSound()">Enable Sound Alerts 🔊</button>
+    <p id="soundNote" style="display:none;">🔊 Sound alerts are ON</p>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Magnitude</th>
+          <th>Location</th>
+          <th>Distance (km)</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="quakeTable"></tbody>
+    </table>
+  </div>
+
+  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+
+  <script>
+    const map = L.map("map").setView([12.8797, 121.7740], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
+
+    let userLocation = null;
+    const quakeTable = document.getElementById("quakeTable");
+    const status = document.getElementById("status");
+    const alertSound = document.getElementById("alertSound");
+
+    function initSound() {
+      alertSound.play().then(() => {
+        const btn = document.getElementById("soundButton");
+        const note = document.getElementById("soundNote");
+        btn.classList.add("enabled");
+        btn.textContent = "Sound Alerts Enabled ✅";
+        note.style.display = "block";
+      }).catch(() => {
+        alert("⚠️ Please tap again to allow sound — browsers require interaction first.");
+      });
+    }
+
+    function onLocationFound(e) {
+      userLocation = e.latlng;
+      const radius = e.accuracy / 2;
+      L.marker(userLocation).addTo(map).bindPopup("📍 You are here").openPopup();
+      L.circle(userLocation, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+    }
+
+    function onLocationError() {
+      status.textContent = "⚠️ Unable to get your location.";
+    }
+
+    map.on("locationfound", onLocationFound);
+    map.on("locationerror", onLocationError);
+    map.locate({ setView: true, maxZoom: 8 });
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat/2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon/2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    async function fetchQuakes() {
+      status.textContent = "Fetching data...";
+      quakeTable.innerHTML = "";
+
+      const url =
+        "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=" +
+        new Date(Date.now() - 86400000).toISOString() +
+        "&minlatitude=4&maxlatitude=21&minlongitude=116&maxlongitude=127";
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const quakes = data.features || [];
+
+        if (quakes.length === 0) {
+          status.innerHTML = "🌎 No earthquakes detected nearby.";
+          return;
+        }
+
+        status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
+        let nearbyDetected = false;
+
+        quakes.forEach(q => {
+          const mag = q.properties.mag;
+          const place = q.properties.place;
+          const time = new Date(q.properties.time).toLocaleString();
+          const lat = q.geometry.coordinates[1];
+          const lon = q.geometry.coordinates[0];
+
+          let distance = userLocation
+            ? calculateDistance(userLocation.lat, userLocation.lng, lat, lon).toFixed(1)
+            : "-";
+
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${distance}</td><td>${time}</td>`;
+          quakeTable.appendChild(row);
+
+          const color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
+          const marker = L.circleMarker([lat, lon], { color, radius: 6, fillOpacity: 0.8 }).addTo(map);
+          marker.bindPopup(`<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
+
+          if (distance !== "-" && distance <= 300) {
+            nearbyDetected = true;
+          }
+        });
+
+        if (nearbyDetected) {
+          alertSound.play();
+          alert("⚠️ Earthquake detected within 300 km of your location!");
+        }
+
+      } catch {
+        status.textContent = "Failed to fetch earthquake data.";
+      }
+    }
+
+    fetchQuakes();
+    setInterval(fetchQuakes, 60000);
+  </script>
+</body>
+</html>
