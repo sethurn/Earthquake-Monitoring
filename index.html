@@ -52,7 +52,7 @@
       margin-bottom: 10px;
     }
 
-    #soundButton {
+    #soundButton, #locateButton {
       background: linear-gradient(90deg, #22c55e, #16a34a);
       color: #fff;
       border: none;
@@ -64,9 +64,10 @@
       transition: all 0.3s ease;
       width: 80%;
       max-width: 280px;
+      margin: 6px 0;
     }
 
-    #soundButton:hover {
+    #soundButton:hover, #locateButton:hover {
       transform: scale(1.03);
       background: linear-gradient(90deg, #16a34a, #15803d);
     }
@@ -126,7 +127,7 @@
         padding: 8px 6px;
         font-size: 0.8rem;
       }
-      #soundButton {
+      #soundButton, #locateButton {
         font-size: 0.85rem;
         padding: 10px 18px;
       }
@@ -135,10 +136,11 @@
 </head>
 <body>
   <h1>🌋 Earthquake Alert Dashboard</h1>
-  <p id="status">Fetching data...</p>
+  <p id="status">Waiting for location access...</p>
   <div id="map"></div>
 
   <div id="soundContainer">
+    <button id="locateButton" onclick="getLocation()">📍 Enable Location</button>
     <button id="soundButton" onclick="initSound()">Enable Sound Alerts 🔊</button>
     <p id="soundNote" style="display:none;">🔊 Sound alerts are ON</p>
   </div>
@@ -157,7 +159,7 @@
     </table>
   </div>
 
-  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" playsinline></audio>
 
   <script>
     const map = L.map("map").setView([12.8797, 121.7740], 5);
@@ -168,16 +170,29 @@
     const status = document.getElementById("status");
     const alertSound = document.getElementById("alertSound");
 
+    const DETECTION_RANGE = 200; // km
+
     function initSound() {
+      const btn = document.getElementById("soundButton");
+      const note = document.getElementById("soundNote");
+
       alertSound.play().then(() => {
-        const btn = document.getElementById("soundButton");
-        const note = document.getElementById("soundNote");
         btn.classList.add("enabled");
         btn.textContent = "Sound Alerts Enabled ✅";
         note.style.display = "block";
+        status.textContent = "🔊 Sound alerts are now active.";
       }).catch(() => {
-        alert("⚠️ Please tap again to allow sound — browsers require interaction first.");
+        alert("⚠️ Please tap 'Enable Sound' again to activate sound on iPhone/iPad.");
       });
+
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function getLocation() {
+      map.locate({ setView: true, maxZoom: 8, watch: true });
+      status.textContent = "📡 Requesting location access...";
     }
 
     function onLocationFound(e) {
@@ -185,15 +200,16 @@
       const radius = e.accuracy / 2;
       L.marker(userLocation).addTo(map).bindPopup("📍 You are here").openPopup();
       L.circle(userLocation, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+      status.textContent = "✅ Location detected. Fetching earthquakes...";
+      fetchQuakes();
     }
 
     function onLocationError() {
-      status.textContent = "⚠️ Unable to get your location.";
+      status.textContent = "⚠️ Location access denied or unavailable.";
     }
 
     map.on("locationfound", onLocationFound);
     map.on("locationerror", onLocationError);
-    map.locate({ setView: true, maxZoom: 8 });
 
     function calculateDistance(lat1, lon1, lat2, lon2) {
       const R = 6371;
@@ -208,9 +224,7 @@
     }
 
     async function fetchQuakes() {
-      status.textContent = "Fetching data...";
       quakeTable.innerHTML = "";
-
       const url =
         "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=" +
         new Date(Date.now() - 86400000).toISOString() +
@@ -220,7 +234,6 @@
         const res = await fetch(url);
         const data = await res.json();
         const quakes = data.features || [];
-
         if (quakes.length === 0) {
           status.innerHTML = "🌎 No earthquakes detected nearby.";
           return;
@@ -248,14 +261,14 @@
           const marker = L.circleMarker([lat, lon], { color, radius: 6, fillOpacity: 0.8 }).addTo(map);
           marker.bindPopup(`<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
 
-          if (distance !== "-" && distance <= 300) {
+          if (distance !== "-" && distance <= DETECTION_RANGE) {
             nearbyDetected = true;
           }
         });
 
         if (nearbyDetected) {
           alertSound.play();
-          alert("⚠️ Earthquake detected within 300 km of your location!");
+          alert(`⚠️ Earthquake detected within ${DETECTION_RANGE} km of your location!`);
         }
 
       } catch {
@@ -263,7 +276,6 @@
       }
     }
 
-    fetchQuakes();
     setInterval(fetchQuakes, 60000);
   </script>
 </body>
