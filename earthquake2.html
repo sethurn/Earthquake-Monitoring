@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Earthquake Alert Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <!-- iOS App-Like Settings -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/9/99/Globe_icon.svg" />
+
+  <style>
+    body {
+      font-family: "Poppins", sans-serif;
+      background: #0f172a;
+      color: #fff;
+      margin: 0;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      overflow-x: hidden;
+    }
+
+    h1 {
+      margin: 15px 0;
+      font-size: 1.4rem;
+    }
+
+    #map {
+      width: 92%;
+      height: 250px;
+      border-radius: 12px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+
+    table {
+      width: 92%;
+      background: #1e293b;
+      border-radius: 12px;
+      margin: 10px 0;
+      border-collapse: collapse;
+      position: relative;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border-bottom: 1px solid #334155;
+    }
+
+    th {
+      background: #334155;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+
+    #overlayMessage {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #94a3b8;
+      font-size: 1rem;
+      text-align: center;
+      display: none;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.5; }
+      50% { opacity: 1; transform: translate(-50%, -52%); }
+      100% { opacity: 0.5; transform: translate(-50%, -50%); }
+    }
+
+    #status {
+      margin: 10px;
+      color: #94a3b8;
+      font-size: 0.9rem;
+    }
+
+    button {
+      background: #22c55e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      background: #16a34a;
+    }
+  </style>
+</head>
+<body>
+  <h1>🌋 Earthquake Alert Dashboard</h1>
+  <p id="status">Fetching data...</p>
+  <div id="map"></div>
+
+  <button onclick="initSound()">Enable Sound Alerts 🔊</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Magnitude</th>
+        <th>Location</th>
+        <th>Distance (km)</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="quakeTable"></tbody>
+    <div id="overlayMessage">No earthquakes detected nearby 🌎</div>
+  </table>
+
+  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
+
+  <script>
+    // Initialize map
+const map = L.map("map").setView([12.8797, 121.7740], 5);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
+
+// Try to locate the user's position
+map.locate({ setView: true, maxZoom: 8, watch: true });
+
+function onLocationFound(e) {
+  const radius = e.accuracy / 2;
+  const userMarker = L.marker(e.latlng).addTo(map)
+    .bindPopup("📍 You are here").openPopup();
+
+  L.circle(e.latlng, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+}
+
+function onLocationError(e) {
+  console.warn("⚠️ Location access denied:", e.message);
+}
+
+map.on("locationfound", onLocationFound);
+map.on("locationerror", onLocationError);
+
+
+    const quakeTable = document.getElementById("quakeTable");
+    const status = document.getElementById("status");
+    const overlayMessage = document.getElementById("overlayMessage");
+    const alertSound = document.getElementById("alertSound");
+
+    function initSound() {
+      alertSound.play().then(() => {
+        alert("✅ Sound alerts are now enabled!");
+      }).catch(() => {
+        alert("Please tap again to allow sound.");
+      });
+    }
+
+    async function fetchQuakes() {
+      status.textContent = "Fetching data...";
+      overlayMessage.style.display = "none";
+      quakeTable.innerHTML = "";
+
+      const url = "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=" +
+        new Date(Date.now() - 86400000).toISOString() +
+        "&minlatitude=4&maxlatitude=21&minlongitude=116&maxlongitude=127";
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const quakes = data.features || [];
+
+        if (quakes.length === 0) {
+          overlayMessage.style.display = "block";
+          status.textContent = "No earthquakes observed near your area.";
+          return;
+        }
+
+        status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
+        overlayMessage.style.display = "none";
+
+        quakes.forEach(q => {
+          const mag = q.properties.mag;
+          const place = q.properties.place;
+          const time = new Date(q.properties.time).toLocaleString();
+
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${time}</td>`;
+          quakeTable.appendChild(row);
+
+          let color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
+          const marker = L.circleMarker([q.geometry.coordinates[1], q.geometry.coordinates[0]], {
+            color,
+            radius: 6,
+            fillOpacity: 0.8
+          }).addTo(map);
+
+          marker.bindPopup(`<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
+
+          if (mag >= 4.5) alertSound.play();
+        });
+      } catch (error) {
+        console.error("Error fetching earthquake data:", error);
+        status.textContent = "Failed to fetch earthquake data.";
+      }
+    }
+
+    fetchQuakes();
+    setInterval(fetchQuakes, 60000); // Refresh every 60s
+  </script>
+</body>
+</html>
