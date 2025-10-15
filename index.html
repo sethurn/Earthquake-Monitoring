@@ -116,10 +116,20 @@
     }
 
     @media (max-width: 600px) {
-      h1 { font-size: 1.1rem; }
-      #map { height: 200px; }
-      th, td { padding: 8px 6px; font-size: 0.8rem; }
-      #soundButton { font-size: 0.85rem; padding: 10px 18px; }
+      h1 {
+        font-size: 1.1rem;
+      }
+      #map {
+        height: 200px;
+      }
+      th, td {
+        padding: 8px 6px;
+        font-size: 0.8rem;
+      }
+      #soundButton {
+        font-size: 0.85rem;
+        padding: 10px 18px;
+      }
     }
   </style>
 </head>
@@ -154,19 +164,6 @@
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
 
     let userLocation = null;
-    map.locate({ setView: true, maxZoom: 8, watch: true });
-
-    function onLocationFound(e) {
-      userLocation = e.latlng;
-      const radius = e.accuracy / 2;
-      L.marker(userLocation).addTo(map).bindPopup("📍 You are here").openPopup();
-      L.circle(userLocation, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
-    }
-    map.on("locationfound", onLocationFound);
-    map.on("locationerror", () => {
-      status.textContent = "⚠️ Location not found. Using default view.";
-    });
-
     const quakeTable = document.getElementById("quakeTable");
     const status = document.getElementById("status");
     const alertSound = document.getElementById("alertSound");
@@ -183,14 +180,30 @@
       });
     }
 
-    function haversine(lat1, lon1, lat2, lon2) {
-      const R = 6371; // km
+    function onLocationFound(e) {
+      userLocation = e.latlng;
+      const radius = e.accuracy / 2;
+      L.marker(userLocation).addTo(map).bindPopup("📍 You are here").openPopup();
+      L.circle(userLocation, { radius, color: "#00BFFF", fillOpacity: 0.2 }).addTo(map);
+    }
+
+    function onLocationError() {
+      status.textContent = "⚠️ Unable to get your location.";
+    }
+
+    map.on("locationfound", onLocationFound);
+    map.on("locationerror", onLocationError);
+    map.locate({ setView: true, maxZoom: 8 });
+
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
       const dLon = (lon2 - lon1) * Math.PI / 180;
       const a =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) ** 2;
+        Math.sin(dLat/2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) *
+        Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon/2) ** 2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
@@ -214,7 +227,6 @@
         }
 
         status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
-
         let nearbyDetected = false;
 
         quakes.forEach(q => {
@@ -224,37 +236,28 @@
           const lat = q.geometry.coordinates[1];
           const lon = q.geometry.coordinates[0];
 
-          let distanceText = "-";
-          let nearby = false;
-
-          if (userLocation) {
-            const dist = haversine(userLocation.lat, userLocation.lng, lat, lon);
-            distanceText = dist.toFixed(1);
-            if (dist <= 200) nearby = true; // alert for ANY quake within 200 km
-          }
+          let distance = userLocation
+            ? calculateDistance(userLocation.lat, userLocation.lng, lat, lon).toFixed(1)
+            : "-";
 
           const row = document.createElement("tr");
-          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${distanceText}</td><td>${time}</td>`;
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${distance}</td><td>${time}</td>`;
           quakeTable.appendChild(row);
 
           const color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
-          const marker = L.circleMarker([lat, lon], {
-            color,
-            radius: 6,
-            fillOpacity: 0.8
-          }).addTo(map);
+          const marker = L.circleMarker([lat, lon], { color, radius: 6, fillOpacity: 0.8 }).addTo(map);
+          marker.bindPopup(`<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
 
-          marker.bindPopup(
-            `<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`
-          );
-
-          if (nearby && !nearbyDetected) {
+          if (distance !== "-" && distance <= 300) {
             nearbyDetected = true;
-            status.innerHTML = `🚨 Nearby Earthquake Detected! (${distanceText} km away)`;
-            alertSound.play();
-            alert(`🚨 Earthquake detected nearby!\nLocation: ${place}\nDistance: ${distanceText} km`);
           }
         });
+
+        if (nearbyDetected) {
+          alertSound.play();
+          alert("⚠️ Earthquake detected within 300 km of your location!");
+        }
+
       } catch {
         status.textContent = "Failed to fetch earthquake data.";
       }
