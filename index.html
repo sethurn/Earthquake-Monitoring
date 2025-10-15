@@ -1,280 +1,176 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Philippines Earthquake Alert Dashboard</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-<style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        background-color: #f0f2f5;
-        color: #333;
-        padding: 10px;
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Earthquake Alert Dashboard</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+  <style>
+    body { font-family: "Poppins", sans-serif; background: #0f172a; color: #fff; margin:0; text-align:center; display:flex; flex-direction:column; align-items:center; min-height:100vh; }
+    h1 { margin:15px 0; font-size:1.4rem; }
+    #map { width:92%; height:250px; border-radius:12px; box-shadow:0 0 10px rgba(0,0,0,0.3); }
+    #status { margin:10px; color:#94a3b8; font-size:0.9rem; animation:fadeIn 0.6s ease-in-out; }
+    @keyframes fadeIn { from{opacity:0; transform:translateY(5px);} to{opacity:1; transform:translateY(0);} }
+    #soundContainer { display:flex; flex-direction:column; align-items:center; margin-bottom:10px; }
+    #soundButton { background:linear-gradient(90deg,#22c55e,#16a34a); color:#fff; border:none; border-radius:10px; padding:12px 24px; font-size:0.95rem; cursor:pointer; font-weight:500; transition:all 0.3s ease; width:80%; max-width:280px; margin:6px 0; }
+    #soundButton:hover { transform:scale(1.03); background:linear-gradient(90deg,#16a34a,#15803d); }
+    #soundButton.enabled { background:linear-gradient(90deg,#2563eb,#1d4ed8); }
+    #soundNote { color:#93c5fd; font-size:0.9rem; margin-top:6px; animation:fadeIn 0.6s ease-in-out; }
+    .table-container { width:92%; margin:10px 0; background:#1e293b; border-radius:12px; overflow-x:auto; box-shadow:0 0 8px rgba(0,0,0,0.2); -webkit-overflow-scrolling: touch; }
+    table { width:100%; border-collapse:collapse; min-width:450px; }
+    th, td { padding:10px; text-align:center; border-bottom:1px solid #334155; font-size:0.9rem; white-space:nowrap; }
+    th { background:#334155; text-transform:uppercase; font-size:0.8rem; position:sticky; top:0; z-index:1; }
+    @media (max-width:600px) {
+      h1 { font-size:1.1rem; }
+      #map { height:200px; }
+      th, td { padding:8px 6px; font-size:0.8rem; }
+      #soundButton { font-size:0.85rem; padding:10px 18px; }
     }
-    header {
-        background: #4CAF50;
-        color: #fff;
-        text-align: center;
-        padding: 20px 10px;
-        border-radius: 10px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    }
-    header h1 { font-size: 1.8rem; }
-    .card {
-        background: #fff;
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    }
-    .loading { text-align: center; font-size: 1.2rem; color: #555; margin-bottom: 15px; }
-    .table-container { width: 100%; overflow-x: auto; }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        min-width: 500px;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: inset 0 0 0 1px #ddd;
-    }
-    th, td { padding: 10px 12px; text-align: left; font-size: 0.95rem; }
-    th { background-color: #4CAF50; color: #fff; font-weight: 600; }
-    tr:nth-child(even) { background-color: #f9f9f9; }
-    #map { height: 50vh; width: 100%; border-radius: 12px; border: 2px solid #4CAF50; }
-    #coordinates { text-align: center; font-weight: 600; margin-top: 10px; }
-    button {
-        padding:10px 15px;
-        background:#4CAF50;
-        color:white;
-        border:none;
-        border-radius:5px;
-        cursor:pointer;
-        font-size:1rem;
-    }
-    button:hover { background:#45a049; }
-    .sms-btn {
-        background: #e53935;
-        margin-top:10px;
-    }
-    .sms-btn:hover { background: #d32f2f; }
-    @media (max-width: 768px) {
-        header h1 { font-size: 1.5rem; }
-        th, td { padding: 8px 10px; font-size: 0.85rem; }
-        #map { height: 45vh; }
-    }
-    @media (max-width: 480px) {
-        header h1 { font-size: 1.3rem; }
-        th, td { padding: 6px 8px; font-size: 0.75rem; }
-        #map { height: 35vh; }
-    }
-</style>
+  </style>
 </head>
 <body>
+  <h1>🌋 Earthquake Alert Dashboard</h1>
+  <p id="status">Click the map to pin your location and enable alerts.</p>
+  <div id="map"></div>
 
-<header>
-    <h1>Philippines Earthquake Alert Dashboard</h1>
-</header>
+  <div id="soundContainer">
+    <button id="soundButton" onclick="initSound()">Enable Sound Alerts 🔊</button>
+    <p id="soundNote" style="display:none;">🔊 Sound alerts are ON</p>
+  </div>
 
-<div class="card">
-    <div id="loading" class="loading">Loading earthquake data...</div>
-    <div class="table-container">
-        <table id="earthquakeTable" style="display:none;">
-            <thead>
-                <tr>
-                    <th>Time (UTC)</th>
-                    <th>Location</th>
-                    <th>Magnitude</th>
-                    <th>Depth (km)</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
-</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>Magnitude</th>
+          <th>Location</th>
+          <th>Distance (km)</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="quakeTable"></tbody>
+    </table>
+  </div>
 
-<div class="card">
-    <div id="map"></div>
-    <div id="coordinates">Marker Coordinates: N/A</div>
-    <div style="text-align:center; margin-top:10px;">
-        <button id="recalcLocationBtn">Recalculate My Location</button>
-    </div>
-</div>
+  <audio id="alertSound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" playsinline></audio>
 
-<!-- SMS Help Button -->
-<div style="text-align:center; margin:20px 0;">
-    <button id="sendSMSBtn" class="sms-btn">
-        Send Help SMS
-    </button>
-</div>
+  <script>
+    const map = L.map("map").setView([12.8797, 121.7740], 5);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 10 }).addTo(map);
 
-<audio id="alertSound">
-    <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
-</audio>
-
-<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function() {
-    const loadingDiv = document.getElementById('loading');
-    const table = document.getElementById('earthquakeTable');
-    const tbody = table.querySelector('tbody');
-    const coordDiv = document.getElementById('coordinates');
-    const alertSound = document.getElementById('alertSound');
-    const recalcBtn = document.getElementById('recalcLocationBtn');
-    const sendSMSBtn = document.getElementById('sendSMSBtn');
-
-    const minLat = 5.0, maxLat = 20.0, minLon = 115.0, maxLon = 130.0;
-    const alertRadiusKm = 200;
-
+    let userLocation = null;
     let userMarker = null;
-    let earthquakeData = [];
-    let eqMarkers = [];
+    let quakeMarkers = [];
+    const quakeTable = document.getElementById("quakeTable");
+    const status = document.getElementById("status");
+    const alertSound = document.getElementById("alertSound");
+    const DETECTION_RANGE = 200; // km
 
-    const map = L.map('map').setView([12.8797, 121.7740], 6);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '© OpenStreetMap' }).addTo(map);
+    function initSound() {
+      const btn = document.getElementById("soundButton");
+      const note = document.getElementById("soundNote");
 
-    function toRadians(degrees) { return degrees * Math.PI / 180; }
-    function getDistanceKm(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = toRadians(lat2 - lat1);
-        const dLon = toRadians(lon2 - lon1);
-        const a = Math.sin(dLat/2)**2 + Math.cos(toRadians(lat1))*Math.cos(toRadians(lat2))*Math.sin(dLon/2)**2;
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
+      alertSound.play().then(() => {
+        btn.classList.add("enabled");
+        btn.textContent = "Sound Alerts Enabled ✅";
+        note.style.display = "block";
+        status.textContent = "🔊 Sound alerts are now active.";
+      }).catch(() => {
+        alert("⚠️ Tap 'Enable Sound' again to activate sound on iPhone/iPad.");
+      });
+
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+      if (audioCtx.state === "suspended") audioCtx.resume();
     }
 
-    function checkEarthquakes() {
-        if (!userMarker) return;
-        const userPos = userMarker.getLatLng();
-        let alertTriggered = false;
-        earthquakeData.forEach(eq => {
-            const eqCoords = eq.geometry.coordinates;
-            const distance = getDistanceKm(userPos.lat, userPos.lng, eqCoords[1], eqCoords[0]);
-            if (distance <= alertRadiusKm) alertTriggered = true;
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    async function fetchQuakes() {
+      quakeTable.innerHTML = "";
+      quakeMarkers.forEach(marker => map.removeLayer(marker));
+      quakeMarkers = [];
+
+      // Compute last 12 hours in UTC
+      const now = new Date();
+      const twelveHoursAgoUTC = new Date(now.getTime() - 12*60*60*1000).toISOString();
+
+      const url =
+        "https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=" +
+        twelveHoursAgoUTC +
+        "&minlatitude=4&maxlatitude=21&minlongitude=116&maxlongitude=127";
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const quakes = data.features || [];
+        if (quakes.length === 0) {
+          status.innerHTML = "🌎 No earthquakes detected nearby in the last 12 hours.";
+          return;
+        }
+
+        status.textContent = `Fetched ${quakes.length} recent earthquakes.`;
+        let nearbyDetected = false;
+
+        quakes.forEach(q => {
+          const mag = q.properties.mag;
+          const place = q.properties.place;
+          const time = new Date(q.properties.time).toLocaleString();
+          const lat = q.geometry.coordinates[1];
+          const lon = q.geometry.coordinates[0];
+
+          let distance = userLocation
+            ? calculateDistance(userLocation.lat, userLocation.lng, lat, lon).toFixed(1)
+            : "-";
+
+          const row = document.createElement("tr");
+          row.innerHTML = `<td>${mag}</td><td>${place}</td><td>${distance}</td><td>${time}</td>`;
+          quakeTable.appendChild(row);
+
+          let color = mag < 3 ? "green" : mag < 5 ? "orange" : "red";
+          let radius = 6;
+
+          if (distance !== "-" && distance <= DETECTION_RANGE) {
+            nearbyDetected = true;
+            color = "red";
+            radius = 12;
+          }
+
+          const marker = L.circleMarker([lat, lon], { color, radius, fillOpacity: 0.8 }).addTo(map);
+          marker.bindPopup(`<b>Magnitude:</b> ${mag}<br><b>Location:</b> ${place}<br><b>Time:</b> ${time}`);
+          quakeMarkers.push(marker);
         });
-        if (alertTriggered) {
-            alertSound.currentTime = 0;
-            alertSound.play();
-            setTimeout(() => { alertSound.pause(); }, 10000);
+
+        if (nearbyDetected) {
+          alertSound.play();
+          alert(`⚠️ Earthquake detected within ${DETECTION_RANGE} km of your location!`);
         }
+
+      } catch {
+        status.textContent = "Failed to fetch earthquake data.";
+      }
     }
 
-    function clearMarkers() {
-        eqMarkers.forEach(m => map.removeLayer(m));
-        eqMarkers = [];
-    }
-
-    function fetchEarthquakes() {
-        const endTime = new Date().toISOString();
-        const startTime = new Date(Date.now() - 12*60*60*1000).toISOString();
-        const apiUrl = `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startTime}&endtime=${endTime}&minlatitude=${minLat}&maxlatitude=${maxLat}&minlongitude=${minLon}&maxlongitude=${maxLon}&minmagnitude=2.5`;
-
-        fetch(apiUrl)
-            .then(res => res.json())
-            .then(data => {
-                earthquakeData = data.features;
-                tbody.innerHTML = '';
-                clearMarkers();
-
-                if (!earthquakeData.length) {
-                    tbody.innerHTML = '<tr><td colspan="4">No earthquakes found in the last 12 hours.</td></tr>';
-                } else {
-                    earthquakeData.forEach(feature => {
-                        const props = feature.properties;
-                        const coords = feature.geometry.coordinates;
-                        const row = document.createElement('tr');
-                        row.innerHTML = `<td>${new Date(props.time).toISOString()}</td>
-                                         <td>${props.place}</td>
-                                         <td>${props.mag}</td>
-                                         <td>${coords[2]}</td>`;
-                        tbody.appendChild(row);
-
-                        const marker = L.circleMarker([coords[1], coords[0]], {
-                            radius: props.mag*2,
-                            color: 'red',
-                            fillOpacity: 0.6
-                        }).addTo(map)
-                        .bindPopup(`<b>${props.place}</b><br>Magnitude: ${props.mag}<br>Depth: ${coords[2]} km`);
-                        eqMarkers.push(marker);
-                    });
-                }
-                table.style.display = 'table';
-                loadingDiv.style.display = 'none';
-                checkEarthquakes();
-            })
-            .catch(err => {
-                loadingDiv.innerText = 'Failed to load earthquake data.';
-                console.error(err);
-            });
-    }
-
-    // Click-to-pin user location
-    map.on('click', function(e) {
-        const lat = e.latlng.lat;
-        const lng = e.latlng.lng;
-
-        if (!userMarker) {
-            userMarker = L.marker([lat, lng]).addTo(map)
-                .bindPopup('Your selected location')
-                .openPopup();
-        } else {
-            userMarker.setLatLng([lat, lng]);
-        }
-
-        coordDiv.innerText = `Marker Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-        checkEarthquakes();
+    // Pin user location
+    map.on("click", function(e) {
+      userLocation = e.latlng;
+      if (userMarker) map.removeLayer(userMarker);
+      userMarker = L.marker(userLocation, { draggable: true }).addTo(map)
+        .bindPopup("📍 Your pinned location").openPopup();
+      status.textContent = "✅ Location pinned! Fetching earthquakes...";
+      fetchQuakes();
     });
 
-    // Initialize user pin at center
-    userMarker = L.marker([12.8797, 121.7740]).addTo(map)
-        .bindPopup('Your selected location')
-        .openPopup();
-    coordDiv.innerText = `Marker Coordinates: 12.87970, 121.77400`;
-
-    // Recalculate location button
-    recalcBtn.addEventListener('click', () => {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(pos => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-
-                if (!userMarker) {
-                    userMarker = L.marker([lat, lng]).addTo(map)
-                        .bindPopup('Your selected location')
-                        .openPopup();
-                } else {
-                    userMarker.setLatLng([lat, lng]);
-                }
-
-                coordDiv.innerText = `Marker Coordinates: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                map.setView([lat, lng], 12);
-                checkEarthquakes();
-            }, () => {
-                alert('Unable to access your current location.');
-            });
-        } else {
-            alert('Geolocation is not supported by your browser.');
-        }
-    });
-
-    // Send SMS Help button
-    sendSMSBtn.addEventListener('click', () => {
-        if (!userMarker) {
-            alert("Please select your location on the map first.");
-            return;
-        }
-        const userPos = userMarker.getLatLng();
-        const message = `Help! My current location is: https://www.google.com/maps/search/?api=1&query=${userPos.lat.toFixed(5)},${userPos.lng.toFixed(5)}`;
-        const phoneNumber = "09178475757";
-        window.location.href = `sms:${phoneNumber}?body=${encodeURIComponent(message)}`;
-    });
-
-    // Fetch immediately and refresh every 60 seconds
-    fetchEarthquakes();
-    setInterval(fetchEarthquakes, 60000);
-});
-</script>
+    setInterval(() => { if (userLocation) fetchQuakes(); }, 60000);
+  </script>
 </body>
 </html>
